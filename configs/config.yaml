@@ -1,0 +1,25 @@
+# Default configuration. Any value can be overridden by an environment variable
+# (see .env.example). Nothing here is tied to one specific video.
+app:
+  host: 0.0.0.0
+  port: 8000
+  log_level: INFO
+
+video:
+  source: sample_data/traffic.mp4   # path | webcam index | rtsp/http URL
+  loop: false
+  max_reconnect_attempts: 3
+  reconnect_delay_s: 2.0
+  allowed_extensions: [".mp4", ".avi", ".mov", ".mkv"]
+
+preprocessing:
+  frame_width: 1280
+  frame_height: 720
+  frame_skip: 2
+
+database:
+  url: sqlite:///./smart_traffic.db
+
+paths:
+  roi_file: configs/rois.json
+  output_dir: outputs

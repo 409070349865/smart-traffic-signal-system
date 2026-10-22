@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.db
+.pytest_cache/
+sample_data/*
+!sample_data/README.md
+!sample_data/.gitkeep
+outputs/*/*
+!outputs/*/.gitkeep
+*.pt
+.idea/
+.vscode/

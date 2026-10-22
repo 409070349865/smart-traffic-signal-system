@@ -1,0 +1,12 @@
+{
+  "_comment": "ROI polygons in pixels of the resized frame (FRAME_WIDTH x FRAME_HEIGHT). Placeholder values for a 1280x720 frame; adjust per video. Used from Phase 6.",
+  "default": {
+    "frame_size": [1280, 720],
+    "approaches": {
+      "NORTH": {"polygon": [[480, 0], [800, 0], [800, 300], [480, 300]], "stop_line": [[480, 300], [800, 300]]},
+      "SOUTH": {"polygon": [[480, 420], [800, 420], [800, 720], [480, 720]], "stop_line": [[480, 420], [800, 420]]},
+      "EAST":  {"polygon": [[800, 260], [1280, 260], [1280, 460], [800, 460]], "stop_line": [[800, 260], [800, 460]]},
+      "WEST":  {"polygon": [[0, 260], [480, 260], [480, 460], [0, 460]], "stop_line": [[480, 260], [480, 460]]}
+    }
+  }
+}
