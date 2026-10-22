@@ -1,325 +1,687 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Traffic Signal System — SignalSync Dashboard</title>
-  <meta name="description" content="Real-time adaptive traffic signal control dashboard with computer vision pipeline, 4-way junction control, and performance analytics." />
+  <title>Smart Traffic Signal System — SignalSync Adaptive HMI</title>
+  <meta name="description"
+    content="4-Way Junction Adaptive Traffic Signal Control with OpenCV Computer Vision, PCU Classification, Anti-Starvation, and Green Wave Synchronization." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
 </head>
+
 <body>
 
-<!-- ═══════════════════ HEADER ═══════════════════ -->
-<header class="topbar">
-  <div class="topbar-left">
-    <div class="signal-badge" id="connBadge">
-      <span class="dot pulsing"></span>
-      <span id="connLabel">CONNECTING…</span>
+  <!-- ═══════════════════ TOP NAVIGATION HEADER ═══════════════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand-title">
+        <span class="brand-icon">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="2" y="2" width="20" height="20" rx="4" />
+            <circle cx="12" cy="7" r="2" fill="#ff1744" stroke="none" />
+            <circle cx="12" cy="12" r="2" fill="#ffea00" stroke="none" />
+            <circle cx="12" cy="17" r="2" fill="#00e676" stroke="none" />
+          </svg>
+        </span>
+        <span class="brand-text">4-Way Junction Sim + CV</span>
+      </div>
+
+      <!-- Action buttons in topbar matching screenshot -->
+      <button class="topbar-btn camera-btn" id="btnInitCamera" onclick="initLiveCamera()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span>Initialize Live Camera</span>
+      </button>
+
+      <label class="topbar-btn upload-btn" for="videoFileInput" id="lblUploadVideo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Upload Traffic Video</span>
+      </label>
+      <input type="file" id="videoFileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none" onchange="handleVideoUpload(this)" />
+
+      <button class="topbar-btn csv-btn" id="btnDownloadCSV" onclick="downloadCSVReport()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Download CSV Report</span>
+      </button>
+
+      <button class="topbar-btn pause-btn" id="btnPause" onclick="togglePause()">
+        <span id="pauseIcon">⏸</span> <span id="pauseText">PAUSE</span>
+      </button>
+
+      <button class="topbar-btn code-btn" id="btnCodeModal" onclick="openAbstractModal()">
+        <span>&lt;/&gt; Abstract &amp; Python Code</span>
+      </button>
     </div>
-    <div class="app-title">
-      <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
-      </svg>
-      SMART TRAFFIC SIGNAL SYSTEM
+
+    <div class="topbar-right">
+      <div class="status-pill" id="connPill">
+        <span class="dot pulsing"></span>
+        <span id="connLabel">LIVE 16 FPS</span>
+      </div>
     </div>
-    <div class="members">
-      <span>Members: 1. Atharaw Arun Futane</span>
+  </header>
+
+  <!-- ═══════════════════ 8-STEP CV ALGORITHM STEPPER ═══════════════════ -->
+  <div class="algorithm-bar">
+    <span class="algo-label">8-STEP CV ALGORITHM:</span>
+    <div class="algo-steps">
+      <div class="algo-step" data-step="1">1 Video Capture</div>
+      <div class="algo-step" data-step="2">2 Preprocessing</div>
+      <div class="algo-step" data-step="3">3 PCU Contours</div>
+      <div class="algo-step" data-step="4">4 Density + Aging</div>
+      <div class="algo-step active" data-step="5">5 Green Allocation</div>
+      <div class="algo-step" data-step="6">6 Safe Sequencing</div>
+      <div class="algo-step" data-step="7">7 GUI Display</div>
+      <div class="algo-step" data-step="8">8 Eval &amp; Eco KPI</div>
     </div>
   </div>
-  <div class="topbar-right">
-    <div class="stat-chip">
-      <span class="chip-label">PHASE</span>
-      <span class="chip-val green" id="hdrPhase">GREEN</span>
+
+  <!-- ═══════════════════ 3-COLUMN MAIN LAYOUT ═══════════════════ -->
+  <main class="dashboard-grid">
+
+    <!-- ════════════════ COLUMN 1: LEFT ════════════════ -->
+    <section class="col col-left">
+
+      <!-- STEP 1-3: OPENCV MULTI-LANE VISION & PCU CONTOURS -->
+      <div class="card card-cv-feeds">
+        <div class="card-header">
+          <div class="title-with-dot">
+            <span class="status-indicator-dot"></span>
+            <h2>STEP 1-3: OPENCV MULTI-LANE VISION &amp; PCU CONTOURS</h2>
+          </div>
+        </div>
+        <div class="card-subheader">
+          Source: <code>cv2.VideoCapture(4-Way Approaches)</code> | PCU Classification &amp; ROI Tracking
+        </div>
+
+        <!-- Vision Mode Tabs -->
+        <div class="feed-tabs" id="feedTabs">
+          <button class="tab-btn active" onclick="setVisionTab('rgb')">RGB + PCU Contours</button>
+          <button class="tab-btn" onclick="setVisionTab('gray')">Step 2: Gray+Blur</button>
+          <button class="tab-btn" onclick="setVisionTab('mog2')">Step 2: MOG2 Mask</button>
+          <button class="tab-btn" onclick="setVisionTab('grid')">Split 4-Lane Grid</button>
+        </div>
+
+        <!-- 4 Camera Views (2x2 Grid) -->
+        <div class="cam-2x2-grid">
+          <!-- CAM_01: NORTH -->
+          <div class="cam-box" id="cambox-NORTH">
+            <div class="cam-bar">
+              <span class="cam-name"><span class="dot-sig red"></span> CAM_01: NORTH</span>
+              <span class="cam-sig-badge red" id="camSig-NORTH">RED (WAIT)</span>
+            </div>
+            <div class="cam-canvas-wrap">
+              <canvas id="camCanvas-NORTH" width="220" height="120"></canvas>
+            </div>
+            <div class="cam-footer">
+              <span>Veh: <b id="camVeh-NORTH">5 (6.0 PCU)</b></span>
+              <span>Den: <b id="camDen-NORTH">41%</b></span>
+              <span>T_g: <b id="camTg-NORTH">19s</b></span>
+            </div>
+          </div>
+
+          <!-- CAM_02: SOUTH -->
+          <div class="cam-box" id="cambox-SOUTH">
+            <div class="cam-bar">
+              <span class="cam-name"><span class="dot-sig green"></span> CAM_02: SOUTH</span>
+              <span class="cam-sig-badge green" id="camSig-SOUTH">GREEN (15s)</span>
+            </div>
+            <div class="cam-canvas-wrap">
+              <canvas id="camCanvas-SOUTH" width="220" height="120"></canvas>
+            </div>
+            <div class="cam-footer">
+              <span>Veh: <b id="camVeh-SOUTH">3 (5.0 PCU)</b></span>
+              <span>Den: <b id="camDen-SOUTH">34%</b></span>
+              <span>T_g: <b id="camTg-SOUTH">17s</b></span>
+            </div>
+          </div>
+
+          <!-- CAM_03: EAST -->
+          <div class="cam-box" id="cambox-EAST">
+            <div class="cam-bar">
+              <span class="cam-name"><span class="dot-sig red"></span> CAM_03: EAST</span>
+              <span class="cam-sig-badge red" id="camSig-EAST">RED (WAIT)</span>
+            </div>
+            <div class="cam-canvas-wrap">
+              <canvas id="camCanvas-EAST" width="220" height="120"></canvas>
+            </div>
+            <div class="cam-footer">
+              <span>Veh: <b id="camVeh-EAST">5 (8.5 PCU)</b></span>
+              <span>Den: <b id="camDen-EAST">58%</b></span>
+              <span>T_g: <b id="camTg-EAST">22s</b></span>
+            </div>
+          </div>
+
+          <!-- CAM_04: WEST -->
+          <div class="cam-box" id="cambox-WEST">
+            <div class="cam-bar">
+              <span class="cam-name"><span class="dot-sig red"></span> CAM_04: WEST</span>
+              <span class="cam-sig-badge red" id="camSig-WEST">RED (WAIT)</span>
+            </div>
+            <div class="cam-canvas-wrap">
+              <canvas id="camCanvas-WEST" width="220" height="120"></canvas>
+            </div>
+            <div class="cam-footer">
+              <span>Veh: <b id="camVeh-WEST">6 (4.5 PCU)</b></span>
+              <span>Den: <b id="camDen-WEST">31%</b></span>
+              <span>T_g: <b id="camTg-WEST">17s</b></span>
+            </div>
+          </div>
+        </div>
+      </div><!-- /Card STEP 1-3 -->
+
+      <!-- EMERGENCY PREEMPTION, GRIDLOCK, PEDESTRIAN & RUSH CONTROLS -->
+      <div class="card card-controls">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-bolt">⚡</span>
+            <h2>EMERGENCY PREEMPTION, GRIDLOCK, PEDESTRIAN &amp; RUSH CONTROLS</h2>
+          </div>
+          <button class="link-btn" onclick="resetQueues()">Reset Queues</button>
+        </div>
+
+        <!-- Feature B: Emergency Ambulance Preemption Box -->
+        <div class="feature-b-box">
+          <div class="feature-b-header">
+            <span class="feat-title">🚑 FEATURE B: EMERGENCY AMBULANCE GREEN CORRIDOR PREEMPTION</span>
+            <span class="feat-status" id="ambStatusBadge">STANDBY</span>
+          </div>
+          <div class="amb-btn-row">
+            <button class="amb-btn" id="ambBtnN" onclick="triggerAmbulance('NORTH')">🚨 Amb NORTH</button>
+            <button class="amb-btn" id="ambBtnS" onclick="triggerAmbulance('SOUTH')">🚨 Amb SOUTH</button>
+            <button class="amb-btn" id="ambBtnE" onclick="triggerAmbulance('EAST')">🚨 Amb EAST</button>
+            <button class="amb-btn" id="ambBtnW" onclick="triggerAmbulance('WEST')">🚨 Amb WEST</button>
+          </div>
+        </div>
+
+        <!-- Gridlock & Pedestrian Controls Row -->
+        <div class="action-btn-row">
+          <button class="btn-gridlock" id="btnTestGridlock" onclick="testYellowBoxGridlock()">
+            ⚠️ Test Yellow-Box Gridlock
+          </button>
+          <button class="btn-ped-add" id="btnAddPed" onclick="addPedestrianDemand()">
+            🚶 +Pedestrian Demand (<span id="pedDemandCount">0</span>)
+          </button>
+          <button class="btn-ped-trigger" id="btnTriggerPed" onclick="triggerPedWalkPhase()">
+            Trigger Ped Walk Phase
+          </button>
+        </div>
+
+        <!-- Traffic Flow Preset Buttons -->
+        <div class="presets-row">
+          <button class="preset-btn active" id="scenNormal" onclick="setPreset('Normal Flow')">Normal Flow</button>
+          <button class="preset-btn" id="scenPeak" onclick="setPreset('Peak Rush')">Peak Rush</button>
+          <button class="preset-btn" id="scenSurge" onclick="setPreset('Arterial Surge')">Arterial Surge</button>
+          <button class="preset-btn" id="scenNight" onclick="setPreset('Night Low-Flow')">Night Low-Flow</button>
+        </div>
+      </div><!-- /Card Controls -->
+
+      <!-- FEATURE G: RED-LIGHT VIOLATION & STALLED VEHICLE LOG -->
+      <div class="card card-incidents">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-camera">📷</span>
+            <h2>FEATURE G: RED-LIGHT VIOLATION &amp; STALLED VEHICLE LOG</h2>
+          </div>
+          <div class="sim-incident-btns">
+            <button class="btn-sim-inc" onclick="simRedRunner()">+Sim Red Runner</button>
+            <button class="btn-sim-inc" onclick="simStalledVeh()">+Sim Stalled Veh</button>
+          </div>
+        </div>
+        <div class="card-subheader">
+          Stop-Line ROI Intrusion &amp; Stationary Green-Phase Obstruction Snapshots
+        </div>
+
+        <div class="incident-list" id="incidentList">
+          <!-- Filled dynamically with incident items -->
+        </div>
+      </div><!-- /Card Incidents -->
+
+    </section>
+
+    <!-- ════════════════ COLUMN 2: CENTER ════════════════ -->
+    <section class="col col-center">
+
+      <!-- STEP 6 & 7: LIVE 4-WAY JUNCTION & SAFE SEQUENCING -->
+      <div class="card junction-card">
+        <div class="card-header space-between">
+          <div class="title-with-dot">
+            <span class="status-indicator-dot"></span>
+            <h2>STEP 6 &amp; 7: LIVE 4-WAY JUNCTION &amp; SAFE SEQUENCING</h2>
+          </div>
+          <button class="btn-next-phase" onclick="forceNextPhase()">⏭ Next Phase</button>
+        </div>
+        <div class="card-subheader">
+          Yellow-Box Gridlock Guard • Crosswalk Curb ROIs • PCU Bounding Boxes
+        </div>
+
+        <!-- Active Phase Banner -->
+        <div class="active-phase-bar" id="activePhaseBar">
+          <div class="phase-left">
+            <div class="phase-leds" id="phaseLeds">
+              <span class="pled red"></span>
+              <span class="pled yellow"></span>
+              <span class="pled green active"></span>
+            </div>
+            <div class="phase-info">
+              <div class="phase-tag">ACTIVE PHASE <span class="tag-pill">ADAPTIVE PCU</span></div>
+              <div class="phase-name" id="activeLaneName">LANE 2: SOUTH (GREEN)</div>
+            </div>
+          </div>
+          <div class="phase-countdown">
+            <div class="cd-label">COUNTDOWN</div>
+            <div class="cd-val" id="phaseCountdownVal">15<span class="cd-unit">s</span></div>
+          </div>
+        </div>
+
+        <!-- 2D Canvas 4-Way Intersection Simulation -->
+        <div class="junction-canvas-container">
+          <!-- Floating status badges inside intersection -->
+          <div class="canvas-badges">
+            <div class="canvas-badge yellowbox" id="yellowBoxBadge">Yellow-Box: CLEAR</div>
+            <div class="canvas-badge curbpeds" id="curbPedsBadge">Curb Pedestrians: 0</div>
+          </div>
+
+          <!-- Canvas Legend -->
+          <div class="canvas-legend">
+            <div class="leg-item"><span class="leg-dot bike"></span> Bike (0.5 PCU)</div>
+            <div class="leg-item"><span class="leg-dot car"></span> Car/Auto (1.0 PCU)</div>
+            <div class="leg-item"><span class="leg-dot bus"></span> Bus/Truck (3.0 PCU)</div>
+            <div class="leg-item"><span class="leg-dot amb"></span> Ambulance (PREEMPT)</div>
+          </div>
+
+          <canvas id="junctionCanvas" width="460" height="420"></canvas>
+
+          <!-- Bottom Priority Banner -->
+          <div class="next-priority-banner" id="nextPriorityBanner">
+            Next Priority: <span class="prio-val" id="nextPriorityVal">WEST (17s [STARVE])</span>
+          </div>
+        </div>
+      </div><!-- /Card Junction -->
+
+      <!-- FEATURE H: MULTI-JUNCTION GREEN WAVE CORRIDOR (+350m) -->
+      <div class="card card-greenwave">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-wave">🌊</span>
+            <h2>FEATURE H: MULTI-JUNCTION GREEN WAVE CORRIDOR (+350m)</h2>
+          </div>
+          <span class="corridor-badge" id="corridorBadge">OFFSET: +14s SYNCED</span>
+        </div>
+        <div class="greenwave-diagram">
+          <div class="gw-node">
+            <span class="node-icon">🚦</span>
+            <span class="node-name">JCT_A</span>
+            <span class="node-sub">(SignalSync Primary)</span>
+          </div>
+          <div class="gw-line-wrap">
+            <div class="gw-platoon-badge" id="gwPlatoonBadge">
+              Platoon (SOUTH): <b id="gwPcu">5 PCU</b> ➔ ETA <b id="gwEta">9s</b>
+            </div>
+            <div class="gw-line">
+              <div class="gw-dot-runner" id="gwRunner"></div>
+            </div>
+          </div>
+          <div class="gw-node">
+            <span class="node-icon">🚦</span>
+            <span class="node-name">JCT_B</span>
+            <span class="node-sub">(Downstream)</span>
+          </div>
+        </div>
+      </div><!-- /Card Greenwave -->
+
+      <!-- ADAPTIVE TIMING, SAFETY & AGING THRESHOLDS -->
+      <div class="card card-thresholds">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-gear">⚙️</span>
+            <h2>ADAPTIVE TIMING, SAFETY &amp; AGING THRESHOLDS</h2>
+          </div>
+          <span class="card-num-badge">STEPS 5 &amp; 6</span>
+        </div>
+        <div class="thresholds-grid">
+          <div class="thresh-item">
+            <div class="thresh-header">
+              <label for="slMinGreen">Min Green:</label>
+              <span class="thresh-val" id="valMinGreen">10s</span>
+            </div>
+            <input type="range" id="slMinGreen" min="5" max="30" value="10" oninput="onThresholdChange()" />
+          </div>
+
+          <div class="thresh-item">
+            <div class="thresh-header">
+              <label for="slMaxGreen">Max Green:</label>
+              <span class="thresh-val" id="valMaxGreen">45s</span>
+            </div>
+            <input type="range" id="slMaxGreen" min="20" max="90" value="45" oninput="onThresholdChange()" />
+          </div>
+
+          <div class="thresh-item">
+            <div class="thresh-header">
+              <label for="slYellow">Yellow Time:</label>
+              <span class="thresh-val" id="valYellow">3s</span>
+            </div>
+            <input type="range" id="slYellow" min="1" max="8" value="3" oninput="onThresholdChange()" />
+          </div>
+
+          <div class="thresh-item">
+            <div class="thresh-header">
+              <label for="slAllRed">All-Red Safe:</label>
+              <span class="thresh-val" id="valAllRed">2s</span>
+            </div>
+            <input type="range" id="slAllRed" min="1" max="6" value="2" oninput="onThresholdChange()" />
+          </div>
+
+          <div class="thresh-item">
+            <div class="thresh-header">
+              <label for="slMaxRedWait">Max Red Wait:</label>
+              <span class="thresh-val" id="valMaxRedWait">45s</span>
+            </div>
+            <input type="range" id="slMaxRedWait" min="20" max="120" value="45" oninput="onThresholdChange()" />
+          </div>
+
+          <div class="thresh-item">
+            <div class="thresh-header">
+              <label for="slSpawnRate">Spawn Rate:</label>
+              <span class="thresh-val" id="valSpawnRate">1.0x</span>
+            </div>
+            <input type="range" id="slSpawnRate" min="0.2" max="3.0" step="0.1" value="1.0" oninput="onThresholdChange()" />
+          </div>
+        </div>
+      </div><!-- /Card Thresholds -->
+
+    </section>
+
+    <!-- ════════════════ COLUMN 3: RIGHT ════════════════ -->
+    <section class="col col-right">
+
+      <!-- STEP 4 & 5: PCU & ANTI-STARVATION -->
+      <div class="card card-pcu">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-chart">📊</span>
+            <h2>STEP 4 &amp; 5: PCU &amp; ANTI-STARVATION</h2>
+          </div>
+          <span class="mode-badge">Mode: PCU Weighted</span>
+        </div>
+        <div class="formula-line">
+          <code>Priority = Density × (1 + α·Wait/T_starve)</code>
+        </div>
+
+        <div class="pcu-approach-list">
+          <!-- 1. NORTH -->
+          <div class="pcu-card" id="pcuCard-NORTH">
+            <div class="pcu-header">
+              <span class="pcu-num">● 1. NORTH</span>
+              <span class="pcu-tgrn" id="pcuTg-NORTH">T_grn: 19s</span>
+            </div>
+            <div class="pcu-stats-line">
+              <span id="pcuDetail-NORTH">B:2 C:2 H:1 ~ 6.0 PCU</span>
+              <span class="redwait" id="pcuWait-NORTH">RedWait: 42s</span>
+            </div>
+            <div class="pcu-bar-wrap">
+              <span class="pcu-bar-label">Density: <b id="pcuDenVal-NORTH">41%</b></span>
+              <div class="progress-bar">
+                <div class="progress-fill" id="pcuFill-NORTH" style="width: 41%"></div>
+              </div>
+            </div>
+            <div class="pcu-score-line">
+              <span>Priority Score: <b id="pcuScore-NORTH">73.5</b></span>
+            </div>
+          </div>
+
+          <!-- 2. SOUTH -->
+          <div class="pcu-card active-corridor" id="pcuCard-SOUTH">
+            <div class="pcu-header">
+              <span class="pcu-num">● 2. SOUTH</span>
+              <span class="pcu-tgrn" id="pcuTg-SOUTH">T_grn: 17s</span>
+            </div>
+            <div class="pcu-stats-line">
+              <span id="pcuDetail-SOUTH">B:0 C:2 H:1 ~ 5.0 PCU</span>
+              <span class="redwait" id="pcuWait-SOUTH">RedWait: 0s</span>
+            </div>
+            <div class="pcu-bar-wrap">
+              <span class="pcu-bar-label">Density: <b id="pcuDenVal-SOUTH">34%</b></span>
+              <div class="progress-bar">
+                <div class="progress-fill" id="pcuFill-SOUTH" style="width: 34%"></div>
+              </div>
+            </div>
+            <div class="pcu-score-line">
+              <span>Priority Score: <b id="pcuScore-SOUTH">34.0</b></span>
+            </div>
+          </div>
+
+          <!-- 3. EAST -->
+          <div class="pcu-card" id="pcuCard-EAST">
+            <div class="pcu-header">
+              <span class="pcu-num">● 3. EAST</span>
+              <span class="pcu-tgrn" id="pcuTg-EAST">T_grn: 22s</span>
+            </div>
+            <div class="pcu-stats-line">
+              <span id="pcuDetail-EAST">B:1 C:2 H:2 ~ 8.5 PCU</span>
+              <span class="redwait" id="pcuWait-EAST">RedWait: 12s</span>
+            </div>
+            <div class="pcu-bar-wrap">
+              <span class="pcu-bar-label">Density: <b id="pcuDenVal-EAST">58%</b></span>
+              <div class="progress-bar">
+                <div class="progress-fill" id="pcuFill-EAST" style="width: 58%"></div>
+              </div>
+            </div>
+            <div class="pcu-score-line">
+              <span>Priority Score: <b id="pcuScore-EAST">71.1</b></span>
+            </div>
+          </div>
+
+          <!-- 4. WEST -->
+          <div class="pcu-card starvation-boost" id="pcuCard-WEST">
+            <div class="pcu-header">
+              <span class="pcu-num">● 4. WEST <span class="tag-starve" id="tagStarve-WEST">STARVATION BOOST</span></span>
+              <span class="pcu-tgrn" id="pcuTg-WEST">T_grn: 17s</span>
+            </div>
+            <div class="pcu-stats-line">
+              <span id="pcuDetail-WEST">B:3 C:3 H:0 ~ 4.5 PCU</span>
+              <span class="redwait" id="pcuWait-WEST">RedWait: 113s</span>
+            </div>
+            <div class="pcu-bar-wrap">
+              <span class="pcu-bar-label">Density: <b id="pcuDenVal-WEST">31%</b></span>
+              <div class="progress-bar">
+                <div class="progress-fill" id="pcuFill-WEST" style="width: 31%"></div>
+              </div>
+            </div>
+            <div class="pcu-score-line">
+              <span>Priority Score: <b id="pcuScore-WEST">197.2</b></span>
+            </div>
+          </div>
+        </div>
+      </div><!-- /Card PCU -->
+
+      <!-- FEATURE F: ECO-TELEMETRY & FUEL SAVINGS -->
+      <div class="card card-eco">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-leaf">🌱</span>
+            <h2>FEATURE F: ECO-TELEMETRY &amp; FUEL SAVINGS</h2>
+          </div>
+          <span class="eco-badge">Idling Reduction</span>
+        </div>
+        <div class="eco-kpi-grid">
+          <div class="eco-kpi">
+            <div class="kpi-label">FUEL SAVED</div>
+            <div class="kpi-val green" id="ecoFuelSaved">5505 mL</div>
+            <div class="kpi-sub" id="ecoFuelLiters">0.162 L</div>
+          </div>
+          <div class="eco-kpi">
+            <div class="kpi-label">CO2 AVOIDED</div>
+            <div class="kpi-val cyan" id="ecoCo2Avoided">12718 g</div>
+            <div class="kpi-sub" id="ecoCo2Kg">0.128 kg</div>
+          </div>
+          <div class="eco-kpi">
+            <div class="kpi-label">VALUE SAVED</div>
+            <div class="kpi-val yellow" id="ecoValueSaved">₹572.57</div>
+            <div class="kpi-sub">@ ₹104/L</div>
+          </div>
+        </div>
+      </div><!-- /Card Eco -->
+
+      <!-- STEP 8: PERFORMANCE EVALUATION -->
+      <div class="card card-perf">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-speed">📈</span>
+            <h2>STEP 8: PERFORMANCE EVALUATION</h2>
+          </div>
+          <span class="perf-diff-pill" id="perfDiffPill">-18.0% Wait</span>
+        </div>
+        <div class="card-subheader">
+          Adaptive Wait Time vs Fixed-Time (30s)
+        </div>
+        <div class="perf-metrics-row">
+          <div class="pm-box">
+            <div class="pm-title">ADAPTIVE AVG WAIT</div>
+            <div class="pm-num cyan" id="perfAdaptWait">186.3s</div>
+            <div class="pm-sub">Fixed 30s: <b id="perfFixedWait">191.1s</b></div>
+          </div>
+          <div class="pm-box">
+            <div class="pm-title">ACTIVE QUEUE LOAD</div>
+            <div class="pm-num green" id="perfQueueLoad">19 veh</div>
+            <div class="pm-sub">Fixed Queue: <b id="perfFixedQueue">22 veh</b></div>
+          </div>
+        </div>
+
+        <div class="chart-header">
+          <span>AVG WAIT TIME (s): ADAPTIVE vs FIXED 30s</span>
+          <div class="chart-legend">
+            <span class="cleg green">● SignalSync</span>
+            <span class="cleg red">● Fixed</span>
+          </div>
+        </div>
+        <div class="perf-chart-wrap">
+          <canvas id="perfChartCanvas" width="340" height="85"></canvas>
+        </div>
+      </div><!-- /Card Performance -->
+
+      <!-- DECISION MODULE LOG -->
+      <div class="card card-log">
+        <div class="card-header space-between">
+          <div class="title-with-icon">
+            <span class="icon-terminal">&gt;_</span>
+            <h2>DECISION MODULE LOG</h2>
+          </div>
+          <span class="cleared-counter">Cleared: <b id="clearedVehCount">158 veh</b></span>
+        </div>
+        <div class="log-terminal" id="logTerminal">
+          <!-- Populated dynamically -->
+        </div>
+      </div><!-- /Card Log -->
+
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════ REAL-TIME VIDEO & TRACKING STREAM MONITOR ═══════════════════ -->
+  <div class="video-monitor-dock" id="videoMonitorDock" style="display:none;">
+    <div class="dock-header">
+      <div class="dock-title">
+        <span class="dock-dot pulsing"></span>
+        <span id="dockTitleText">OPENCV REAL-TIME VIDEO STREAM &amp; TRACKING HUD</span>
+      </div>
+      <div class="dock-controls">
+        <span class="dock-fps" id="dockFps">0.0 FPS</span>
+        <button class="dock-btn-close" onclick="closeVideoMonitor()">✕</button>
+      </div>
     </div>
-    <div class="stat-chip">
-      <span class="chip-label">CYCLE</span>
-      <span class="chip-val cyan" id="hdrCycle">#1</span>
+    <div class="dock-body">
+      <div class="dock-canvas-wrap">
+        <canvas id="videoCanvas" width="640" height="360"></canvas>
+        <div class="dock-hud-stats">
+          <span>Total Tracks: <b id="vHudTotal">0</b></span>
+          <span>N: <b id="vHudN">0</b></span>
+          <span>S: <b id="vHudS">0</b></span>
+          <span>E: <b id="vHudE">0</b></span>
+          <span>W: <b id="vHudW">0</b></span>
+        </div>
+      </div>
     </div>
-    <div class="stat-chip">
-      <span class="chip-label">WS CLIENTS</span>
-      <span class="chip-val yellow" id="hdrClients">1</span>
-    </div>
-    <button class="btn-pause" id="btnPause" onclick="togglePause()">⏸ PAUSE</button>
   </div>
-</header>
 
-<!-- ═══════════════════ PIPELINE BAR ═══════════════════ -->
-<div class="pipeline-bar">
-  <span class="pipe-label">PROPOSED 8-STEP CV PIPELINE</span>
-  <div class="pipe-steps">
-    <span class="pipe-step active">📷 Video Capture</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step active">⚙️ Preprocessing</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step active">🚗 Vehicle Detection</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step active">📊 Density Score</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step active">🟢 Green Allocation</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step active">🔒 Safe Sequencing</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step active">🖥️ HMI Display</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step">⚡ Fast vs Fixed</span>
+  <!-- ═══════════════════ ABSTRACT & PYTHON CODE MODAL ═══════════════════ -->
+  <div class="modal-backdrop" id="abstractModal" style="display:none;" onclick="handleModalBackdropClick(event)">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">
+          <h3>Smart Traffic Signal System — Mathematical Formulation &amp; OpenCV CV Pipeline</h3>
+        </div>
+        <button class="modal-close-btn" onclick="closeAbstractModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <h4>1. Academic Abstract</h4>
+        <p>
+          Urban traffic congestion leads to substantial economic loss, fuel wastage, and elevated environmental emissions.
+          Conventional fixed-time signal controllers allocate pre-determined phase durations that fail to adapt to asymmetric,
+          dynamic traffic demand. This research presents <b>SignalSync</b>, an end-to-end Computer Vision-driven adaptive traffic
+          signal control platform combining OpenCV background subtraction (MOG2), contour-based Passenger Car Unit (PCU)
+          classification, and dynamic anti-starvation queuing optimization with multi-junction green wave corridor synchronization.
+        </p>
+
+        <h4>2. Mathematical PCU Formulation &amp; Anti-Starvation Allocation</h4>
+        <div class="math-block">
+          <code>PCU_{lane} = 0.5 \times N_{bike} + 1.0 \times N_{car} + 3.0 \times N_{heavy}</code><br/>
+          <code>Priority_i = Density_i \times \left(1 + \alpha \times \frac{Wait_i}{T_{starve}}\right) \times Boost_{starve}</code><br/>
+          <code>T_{green, i} = \max\left(T_{min}, \min\left(T_{max}, \frac{PCU_i}{\sum PCU} \times Budget_{cycle}\right)\right)</code>
+        </div>
+
+        <h4>3. 8-Step Computer Vision &amp; Control Pipeline</h4>
+        <ol class="modal-pipeline-list">
+          <li><b>Video Capture:</b> Ingests multi-camera perspective RTSP streams or uploaded MP4 traffic feeds.</li>
+          <li><b>Spatial Preprocessing:</b> Aspect normalization, Grayscale conversion, and 5×5 Gaussian smoothing.</li>
+          <li><b>MOG2 Background Subtraction:</b> Dynamic mixture of Gaussians with shadow suppression and morphological opening.</li>
+          <li><b>Contour &amp; Centroid Tracking:</b> Area-bounded contour extraction, Euclidean centroid assignment, velocity calculation.</li>
+          <li><b>Green Allocation:</b> Real-time PCU weighting and anti-starvation boost with configurable bounds.</li>
+          <li><b>Safe Sequencing:</b> Inter-phase yellow transition, all-red clearance, and yellow-box gridlock protection.</li>
+          <li><b>HMI Visualization:</b> Cyberpunk-styled real-time telemetry, 2D junction physics, and approach camera overlays.</li>
+          <li><b>Evaluation &amp; Eco KPI:</b> Idling vehicle-seconds reduction, saved fuel calculation, and CO2 abatement telemetry.</li>
+        </ol>
+
+        <h4>4. Production Python OpenCV Engine Code</h4>
+        <div class="code-box-wrap">
+          <button class="copy-btn" onclick="copyPythonCode()">📋 Copy Python Code</button>
+          <pre><code id="pythonSourceCode"># SignalSync Production Python Implementation
+import cv2
+import numpy as np
+
+def allocate_adaptive_green(pcus, t_min=10, t_max=45, budget=90):
+    total = sum(pcus.values()) or 1.0
+    allocations = {}
+    for d, pcu in pcus.items():
+        raw = (pcu / total) * budget
+        allocations[d] = max(t_min, min(t_max, round(raw)))
+    return allocations
+
+# OpenCV MOG2 Tracking Pipeline
+def process_traffic_frame(frame, bg_sub):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    mask = bg_sub.apply(blur)
+    _, mask = cv2.threshold(mask, 200, 255, cv2.THRESH_BINARY)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (4, 4))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    return contours
+</code></pre>
+        </div>
+      </div>
+    </div>
   </div>
-</div>
 
-<!-- ═══════════════════ MAIN GRID ═══════════════════ -->
-<main class="dashboard-grid">
+  <!-- Hidden video element for WebRTC camera stream -->
+  <video id="webcamElement" autoplay playsinline muted style="display:none"></video>
 
-  <!-- ═══ COLUMN 1: Vision Feeds + Scenarios ═══ -->
-  <section class="col col-left">
-
-    <!-- Vision Feeds Card -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-num">STEP 1–3</span>
-        <h2>OPENCV MULTI-LANE VISION FEEDS</h2>
-      </div>
-      <div class="card-subheader">
-        Source: <code>cv2.VideoCapture(4-Way Approaches)</code> | ROI Polygon &amp; Counter Tracking
-      </div>
-
-      <div class="cam-grid" id="camGrid">
-        <!-- CAM_01: NORTH -->
-        <div class="cam-card" id="cam-NORTH">
-          <div class="cam-header">
-            <span class="cam-id">CAM_01: NORTH LANE</span>
-            <span class="signal-light green" id="sig-NORTH">GREEN (31s)</span>
-          </div>
-          <div class="cam-view" id="view-NORTH">
-            <canvas id="canvas-NORTH" width="240" height="120"></canvas>
-          </div>
-          <div class="cam-stats">
-            <span>🚗 <b id="cnt-NORTH">0</b></span>
-            <span>Density: <b id="den-NORTH">0%</b></span>
-            <span>T<sub>green</sub>: <b id="tg-NORTH">0s</b></span>
-          </div>
-        </div>
-        <!-- CAM_02: SOUTH -->
-        <div class="cam-card" id="cam-SOUTH">
-          <div class="cam-header">
-            <span class="cam-id">CAM_02: SOUTH LANE</span>
-            <span class="signal-light red" id="sig-SOUTH">RED (WAIT)</span>
-          </div>
-          <div class="cam-view">
-            <canvas id="canvas-SOUTH" width="240" height="120"></canvas>
-          </div>
-          <div class="cam-stats">
-            <span>🚗 <b id="cnt-SOUTH">0</b></span>
-            <span>Density: <b id="den-SOUTH">0%</b></span>
-            <span>T<sub>green</sub>: <b id="tg-SOUTH">0s</b></span>
-          </div>
-        </div>
-        <!-- CAM_03: EAST -->
-        <div class="cam-card" id="cam-EAST">
-          <div class="cam-header">
-            <span class="cam-id">CAM_03: EAST LANE</span>
-            <span class="signal-light red" id="sig-EAST">RED (WAIT)</span>
-          </div>
-          <div class="cam-view">
-            <canvas id="canvas-EAST" width="240" height="120"></canvas>
-          </div>
-          <div class="cam-stats">
-            <span>🚗 <b id="cnt-EAST">0</b></span>
-            <span>Density: <b id="den-EAST">0%</b></span>
-            <span>T<sub>green</sub>: <b id="tg-EAST">0s</b></span>
-          </div>
-        </div>
-        <!-- CAM_04: WEST -->
-        <div class="cam-card" id="cam-WEST">
-          <div class="cam-header">
-            <span class="cam-id">CAM_04: WEST LANE</span>
-            <span class="signal-light red" id="sig-WEST">RED (WAIT)</span>
-          </div>
-          <div class="cam-view">
-            <canvas id="canvas-WEST" width="240" height="120"></canvas>
-          </div>
-          <div class="cam-stats">
-            <span>🚗 <b id="cnt-WEST">0</b></span>
-            <span>Density: <b id="den-WEST">0%</b></span>
-            <span>T<sub>green</sub>: <b id="tg-WEST">0s</b></span>
-          </div>
-        </div>
-      </div>
-    </div><!-- /Vision Feeds -->
-
-    <!-- Traffic Demand Simulator -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-num">SIM</span>
-        <h2>TRAFFIC DEMAND SIMULATOR &amp; RUSH SCENARIOS</h2>
-        <button class="btn-link" onclick="testAdaptive()">Test Adaptive Response</button>
-      </div>
-      <div class="scenario-row" id="scenarioRow">
-        <button class="scen-btn active" onclick="setScenario('Balanced Flow')">Balanced Flow</button>
-        <button class="scen-btn" onclick="setScenario('N-S Highway Rush')">N-S Highway Rush</button>
-        <button class="scen-btn" onclick="setScenario('East Bottleneck')">East Bottleneck</button>
-        <button class="scen-btn" onclick="setScenario('Night Low Traffic')">Night Low Traffic</button>
-      </div>
-      <div class="inject-label">INJECT CONDITION BURST (+6 VEHICLES)</div>
-      <div class="inject-row">
-        <button class="inj-btn north" id="injN" onclick="inject('NORTH')">+6 North</button>
-        <button class="inj-btn south" id="injS" onclick="inject('SOUTH')">+6 South</button>
-        <button class="inj-btn east"  id="injE" onclick="inject('EAST')">+6 East</button>
-        <button class="inj-btn west"  id="injW" onclick="inject('WEST')">+6 West</button>
-      </div>
-    </div><!-- /Scenarios -->
-
-  </section>
-
-  <!-- ═══ COLUMN 2: Junction + Timing ═══ -->
-  <section class="col col-center">
-
-    <!-- Junction State -->
-    <div class="card junction-card">
-      <div class="card-header">
-        <span class="card-num">STEP 6–7</span>
-        <h2>LIVE 4-WAY JUNCTION &amp; SIGNAL STATE</h2>
-        <button class="btn-link danger" onclick="forceNext()">▶ Next Phase</button>
-      </div>
-
-      <!-- Active approach banner -->
-      <div class="active-approach" id="activeApproach">
-        <div class="approach-label">CURRENT ACTIVE APPROACH</div>
-        <div class="approach-dir" id="approachDir">LANE 1: NORTH (GREEN PHASE)</div>
-        <div class="phase-timer-row">
-          <span class="phase-timer-label">PHASE TIMER</span>
-          <span class="phase-timer" id="phaseTimer">15</span>
-        </div>
-      </div>
-
-      <!-- Junction diagram (canvas) -->
-      <div class="junction-wrap">
-        <canvas id="junctionCanvas" width="380" height="380"></canvas>
-      </div>
-    </div><!-- /Junction -->
-
-    <!-- Timing Config -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-num">CFG</span>
-        <h2>CONFIGURABLE TIMING &amp; SAFETY LIMITS</h2>
-        <span class="badge-rule">RULE-BASED CLAMPING</span>
-      </div>
-      <div class="timing-grid">
-        <div class="timing-row">
-          <label>Min Green (T<sub>min</sub>)</label>
-          <input type="range" id="slTmin" min="5" max="30" value="10" oninput="updateTiming()" />
-          <span class="timing-val" id="valTmin">10s</span>
-        </div>
-        <div class="timing-row">
-          <label>Max Green (T<sub>max</sub>)</label>
-          <input type="range" id="slTmax" min="30" max="120" value="60" oninput="updateTiming()" />
-          <span class="timing-val" id="valTmax">60s</span>
-        </div>
-        <div class="timing-row">
-          <label>Yellow Transition</label>
-          <input type="range" id="slYellow" min="1" max="8" value="3" oninput="updateTiming()" />
-          <span class="timing-val" id="valYellow">3s</span>
-        </div>
-        <div class="timing-row">
-          <label>All-Red Clearance</label>
-          <input type="range" id="slAllRed" min="1" max="6" value="2" oninput="updateTiming()" />
-          <span class="timing-val" id="valAllRed">2s</span>
-        </div>
-      </div>
-
-      <!-- Decision log -->
-      <div class="decision-log" id="decisionLog">
-        <div class="log-header">⚙ DECISION MODEL LOG</div>
-        <div id="logEntries"></div>
-      </div>
-    </div><!-- /Timing -->
-
-  </section>
-
-  <!-- ═══ COLUMN 3: Decision Module + Performance ═══ -->
-  <section class="col col-right">
-
-    <!-- Decision Module -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-num">STEP 4–5</span>
-        <h2>DECISION MODULE</h2>
-      </div>
-      <div class="card-subheader">Proportional Green Allocation to Min Fixed</div>
-
-      <div class="formula-box">
-        <div class="formula-label">Auto-Round Allocation Formula</div>
-        <code>T_green = max(T_min, min(T_max, (c_i / Σc) × budget))</code>
-      </div>
-
-      <div class="lane-list" id="laneList">
-        <!-- Dynamically filled -->
-        <div class="lane-row" id="lr-NORTH">
-          <div class="lr-num">1.</div>
-          <div class="lr-dir">NORTH LANE</div>
-          <div class="lr-stat">Vehicles: <b id="lv-NORTH">—</b></div>
-          <div class="lr-stat">Density: <b id="ld-NORTH">—</b></div>
-          <div class="lr-stat">Wait: <b id="lw-NORTH">—</b></div>
-          <div class="lr-tg" id="ltg-NORTH">—s</div>
-        </div>
-        <div class="lane-row" id="lr-SOUTH">
-          <div class="lr-num">2.</div>
-          <div class="lr-dir">SOUTH LANE</div>
-          <div class="lr-stat">Vehicles: <b id="lv-SOUTH">—</b></div>
-          <div class="lr-stat">Density: <b id="ld-SOUTH">—</b></div>
-          <div class="lr-stat">Wait: <b id="lw-SOUTH">—</b></div>
-          <div class="lr-tg" id="ltg-SOUTH">—s</div>
-        </div>
-        <div class="lane-row" id="lr-EAST">
-          <div class="lr-num">3.</div>
-          <div class="lr-dir">EAST LANE</div>
-          <div class="lr-stat">Vehicles: <b id="lv-EAST">—</b></div>
-          <div class="lr-stat">Density: <b id="ld-EAST">—</b></div>
-          <div class="lr-stat">Wait: <b id="lw-EAST">—</b></div>
-          <div class="lr-tg" id="ltg-EAST">—s</div>
-        </div>
-        <div class="lane-row" id="lr-WEST">
-          <div class="lr-num">4.</div>
-          <div class="lr-dir">WEST LANE</div>
-          <div class="lr-stat">Vehicles: <b id="lv-WEST">—</b></div>
-          <div class="lr-stat">Density: <b id="ld-WEST">—</b></div>
-          <div class="lr-stat">Wait: <b id="lw-WEST">—</b></div>
-          <div class="lr-tg" id="ltg-WEST">—s</div>
-        </div>
-      </div>
-    </div><!-- /Decision Module -->
-
-    <!-- Performance Evaluation -->
-    <div class="card perf-card">
-      <div class="card-header">
-        <span class="card-num">STEP 8</span>
-        <h2>PERFORMANCE EVALUATION</h2>
-        <span class="perf-badge" id="perfBadge">+0% DIFF</span>
-      </div>
-      <div class="card-subheader">Signalised Adaptive vs Fixed-Time (30s)</div>
-
-      <div class="perf-stats">
-        <div class="perf-stat">
-          <div class="ps-label">ADAPTIVE AVG WAIT</div>
-          <div class="ps-val cyan" id="adaptWait">—s</div>
-        </div>
-        <div class="perf-stat">
-          <div class="ps-label">TOTAL VEHС PROCESSED</div>
-          <div class="ps-val green" id="totalVeh">—</div>
-        </div>
-      </div>
-
-      <!-- Throughput mini-chart -->
-      <div class="chart-label">REAL-TIME QUEUE LENGTH COMPARISON — <span class="leg-adaptive">● ADAPTIVE</span> <span class="leg-fixed">— FIXED</span></div>
-      <canvas id="perfChart" width="300" height="100"></canvas>
-    </div><!-- /Performance -->
-
-  </section>
-
-</main>
-
-<script src="/static/js/dashboard.js"></script>
+  <script src="/static/js/dashboard.js"></script>
 </body>
+
 </html>
