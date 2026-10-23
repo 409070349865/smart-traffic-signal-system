@@ -4,9 +4,14 @@ uvicorn[standard]>=0.29
 pydantic>=2.6
 python-dotenv>=1.0
 PyYAML>=6.0
+python-multipart>=0.0.9
 
-# Computer vision / data
-opencv-python>=4.9
+# Security & Authentication
+pyjwt>=2.8.0
+cryptography>=42.0.0
+
+# Computer vision / data (headless for cloud compatibility)
+opencv-python-headless>=4.9.0.80
 numpy>=1.26
 pandas>=2.2
 
@@ -23,3 +28,4 @@ httpx>=0.27
 
 # Optional, added in Phase 4 (YOLO):
 # ultralytics>=8.1
+

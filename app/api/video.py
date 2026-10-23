@@ -3,11 +3,12 @@ Video API router — upload, process, and stream traffic video with OpenCV vehic
 
 Endpoints:
   POST /api/video/upload       → save uploaded video & start processing
+  POST /api/video/camera       → start webcam feed
   POST /api/video/demo         → generate & start built-in synthetic traffic demo video
   GET  /api/video/status       → current processing status
   POST /api/video/stop         → stop processing
   POST /api/video/sync         → toggle syncing detected vehicle counts into traffic simulator
-  WS   /ws/video               → real-time base64 JPEG frame stream & telemetry
+  WS   /ws/video               → real-time base64 JPEG frame stream & telemetry (RGB, CLAHE, Mask, Bird's-Eye)
 """
 from __future__ import annotations
 
@@ -43,6 +44,9 @@ _status = {
     "fps":             0.0,
     "quadrant_counts": {"NORTH": 0, "SOUTH": 0, "EAST": 0, "WEST": 0},
     "sync_to_signal":  True,
+    "mean_flow_speed": 18.0,
+    "strobe_active":   False,
+    "watchdog_ok":     True,
 }
 
 _upload_dir = Path(tempfile.gettempdir()) / "signalsync_uploads"
@@ -64,19 +68,39 @@ async def _broadcast_frame(result: Any) -> None:
     global _last_frame_result
     _last_frame_result = result
 
-    # Update state dictionary
+    # Update status dictionary
     _status["running"]         = True
     _status["frame_idx"]       = result.frame_idx
     _status["vehicle_count"]   = result.vehicle_count
     _status["fps"]             = result.fps
     _status["quadrant_counts"] = result.quadrant_counts
+    _status["mean_flow_speed"] = getattr(result, "mean_flow_speed", 18.0)
+    _status["strobe_active"]   = getattr(result, "strobe_active", False)
+    _status["watchdog_ok"]     = getattr(result, "watchdog_ok", True)
 
-    # If linked to signal, push counts to the traffic simulator
-    if _sync_to_signal and _simulator_ref is not None:
-        try:
-            _simulator_ref.update_from_vision(result.quadrant_counts)
-        except Exception as e:
-            logger.debug("Failed updating simulator from vision: %s", e)
+    # Sync state with simulator
+    if _simulator_ref is not None:
+        if _sync_to_signal:
+            try:
+                _simulator_ref.update_from_vision(result.quadrant_counts)
+            except Exception as e:
+                logger.debug("Failed updating simulator from vision: %s", e)
+
+        # Automatic Strobe Emergency Preemption trigger
+        if getattr(result, "strobe_active", False) and not _simulator_ref.state.ambulance_active:
+            # Trigger ambulance on detected approach
+            appr = "SOUTH"
+            for t in getattr(result, "tracks", {}).values():
+                if getattr(t, "is_emergency", False):
+                    appr = t.approach
+                    break
+            from app.traffic.simulator import Direction
+            _simulator_ref.trigger_ambulance(Direction(appr), is_strobe=True)
+
+        # Inform processor if active signal is RED so learning rate is frozen (learningRate=0.0005)
+        if _processor is not None:
+            is_red = _simulator_ref.state.current_phase.value in ("RED", "ALL_RED")
+            _processor.set_signal_state(is_red)
 
     if not _video_ws_clients:
         return
@@ -86,9 +110,21 @@ async def _broadcast_frame(result: Any) -> None:
         "frame_idx":       result.frame_idx,
         "vehicle_count":   result.vehicle_count,
         "quadrant_counts": result.quadrant_counts,
+        "quadrant_pcus":   getattr(result, "quadrant_pcus", {}),
         "fps":             result.fps,
+        "mean_flow_speed": getattr(result, "mean_flow_speed", 18.0),
+        "strobe_active":   getattr(result, "strobe_active", False),
+        "watchdog_ok":     getattr(result, "watchdog_ok", True),
         "tracks":          getattr(result, "tracks_data", []),
+        "queue_length_m":  getattr(result, "queue_length_m", 0.0),
+        "avg_confidence":  getattr(result, "avg_confidence", 0.92),
+        "stalled_count":   getattr(result, "stalled_count", 0),
+        "wrong_way_count": getattr(result, "wrong_way_count", 0),
+        "class_counts":    getattr(result, "class_counts", {}),
         "jpeg_b64":        result.jpeg_b64,
+        "gray_clahe_b64":  getattr(result, "gray_clahe_b64", ""),
+        "mask_b64":        getattr(result, "mask_b64", ""),
+        "birdseye_b64":    getattr(result, "birdseye_b64", ""),
     }
     data = json.dumps(payload)
     dead = []
@@ -104,7 +140,7 @@ async def _broadcast_frame(result: Any) -> None:
 
 
 async def _run_processor(video_source: Any, source_name: str) -> None:
-    """Background task that runs the OpenCV pipeline on video file or camera."""
+    """Background task running the OpenCV pipeline."""
     global _processor, _status
     from app.vision.processor import VideoProcessor
     _processor = VideoProcessor()
@@ -137,7 +173,6 @@ def _stop_current() -> None:
 # ─── REST endpoints ──────────────────────────────────────── #
 @router.post("/upload")
 async def upload_video(file: UploadFile = File(...)) -> dict:
-    """Upload a traffic video file and start OpenCV processing."""
     if not file.filename:
         return {"error": "No filename"}
 
@@ -145,7 +180,6 @@ async def upload_video(file: UploadFile = File(...)) -> dict:
     if suffix not in {".mp4", ".avi", ".mov", ".mkv", ".webm"}:
         return {"error": f"Unsupported format: {suffix}. Please upload MP4, AVI, MOV, MKV, or WEBM."}
 
-    # Stop any existing video processing
     _stop_current()
 
     save_path = _upload_dir / f"upload_{int(time.time())}{suffix}"
@@ -162,7 +196,6 @@ async def upload_video(file: UploadFile = File(...)) -> dict:
 
 @router.post("/camera")
 async def start_camera(camera_index: int = 0) -> dict:
-    """Initialize live webcam feed and real-time OpenCV tracking."""
     _stop_current()
     global _process_task
     _process_task = asyncio.create_task(
@@ -173,9 +206,7 @@ async def start_camera(camera_index: int = 0) -> dict:
 
 @router.post("/demo")
 async def start_demo_video() -> dict:
-    """Generate (if needed) and run synthetic traffic intersection video."""
     _stop_current()
-
     from app.vision.generator import generate_demo_video
     generate_demo_video(_demo_video_path)
 
@@ -217,7 +248,6 @@ async def ws_video(ws: WebSocket) -> None:
     _video_ws_clients.append(ws)
     logger.info("Video WS client connected. Total: %d", len(_video_ws_clients))
 
-    # Send last frame immediately so client doesn't see a black box
     if _last_frame_result:
         try:
             r = _last_frame_result
@@ -226,9 +256,16 @@ async def ws_video(ws: WebSocket) -> None:
                 "frame_idx":       r.frame_idx,
                 "vehicle_count":   r.vehicle_count,
                 "quadrant_counts": r.quadrant_counts,
+                "quadrant_pcus":   getattr(r, "quadrant_pcus", {}),
                 "fps":             r.fps,
+                "mean_flow_speed": getattr(r, "mean_flow_speed", 18.0),
+                "strobe_active":   getattr(r, "strobe_active", False),
+                "watchdog_ok":     getattr(r, "watchdog_ok", True),
                 "tracks":          getattr(r, "tracks_data", []),
                 "jpeg_b64":        r.jpeg_b64,
+                "gray_clahe_b64":  getattr(r, "gray_clahe_b64", ""),
+                "mask_b64":        getattr(r, "mask_b64", ""),
+                "birdseye_b64":    getattr(r, "birdseye_b64", ""),
             }))
         except Exception:
             pass

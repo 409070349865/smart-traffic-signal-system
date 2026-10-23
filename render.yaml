@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: signalsync-traffic-system
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
+    startCommand: "python run.py"
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: APP_HOST
+        value: 0.0.0.0
+      - key: LOG_LEVEL
+        value: INFO
+      - key: JWT_SECRET_KEY
+        generateValue: true

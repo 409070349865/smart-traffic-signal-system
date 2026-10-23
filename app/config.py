@@ -82,6 +82,7 @@ def _to_bool(v: str) -> bool:
 _ENV_MAP: dict[str, tuple[str, str, Any]] = {
     "APP_HOST": ("app", "host", str),
     "APP_PORT": ("app", "port", int),
+    "PORT": ("app", "port", int),
     "LOG_LEVEL": ("app", "log_level", str),
     "VIDEO_SOURCE": ("video", "source", str),
     "VIDEO_LOOP": ("video", "loop", _to_bool),

@@ -13,3 +13,5 @@ outputs/*/*
 *.pt
 .idea/
 .vscode/
+scratch/
+

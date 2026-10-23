@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  signalsync-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: signalsync_engine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=INFO
+      - JWT_SECRET_KEY=signalsync_production_secret_key_atharav_futane_jitesh_gaikwad_2026
+      - DATABASE_PATH=/app/smart_traffic.db
+    volumes:
+      - ./smart_traffic.db:/app/smart_traffic.db
+      - ./outputs:/app/outputs
+      - ./sample_data:/app/sample_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  signalsync-proxy:
+    image: nginx:alpine
+    container_name: signalsync_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - signalsync-app
